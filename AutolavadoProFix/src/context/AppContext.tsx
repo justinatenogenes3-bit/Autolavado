@@ -46,8 +46,8 @@ interface AppState {
   users: User[];
   washes: Wash[];
   login: (username: string, password: string) => boolean;
+  loginByBiometric: (username: string) => boolean;
   logout: () => void;
-  checkCredentials: (username: string, password: string) => User | null; // ← NUEVO
   addUser: (user: Omit<User, 'id'>) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
   deleteUser: (id: string) => void;
@@ -124,16 +124,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [washes, setWashes] = useState<Wash[]>(INITIAL_WASHES);
 
-  // Verifica credenciales y hace login
+  // Login normal con usuario + contraseña
   const login = (username: string, password: string): boolean => {
     const user = users.find(u => u.username === username && u.password === password);
     if (user) { setCurrentUser(user); return true; }
     return false;
   };
 
-  // Solo verifica credenciales SIN hacer login (para el flujo de admin + Face ID)
-  const checkCredentials = (username: string, password: string): User | null => {
-    return users.find(u => u.username === username && u.password === password) ?? null;
+  // ✅ Login biométrico: la biometría ya verificó la identidad del dispositivo,
+  //    solo buscamos el usuario por username y lo establecemos como activo.
+  //    Logout NO borra el usuario guardado en AsyncStorage, eso lo gestiona
+  //    el botón "Cambiar usuario" del LoginScreen.
+  const loginByBiometric = (username: string): boolean => {
+    const user = users.find(u => u.username === username);
+    if (user) { setCurrentUser(user); return true; }
+    return false;
   };
 
   const logout = () => setCurrentUser(null);
@@ -161,8 +166,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   return (
     <AppContext.Provider value={{
       currentUser, users, washes,
-      login, logout, checkCredentials,
-      addUser, updateUser, deleteUser, addWash, updateWash,
+      login, loginByBiometric, logout,
+      addUser, updateUser, deleteUser,
+      addWash, updateWash,
     }}>
       {children}
     </AppContext.Provider>
