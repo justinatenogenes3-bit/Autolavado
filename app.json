@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Autolavado Pro",
+    "slug": "autolavadopro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1D4ED8"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.autolavadopro",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Usamos Face ID para verificar tu identidad como administrador."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1D4ED8"
+      },
+      "package": "com.autolavadopro",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Necesitamos tu ubicación para verificar que estás en el autolavado."
+        }
+      ],
+      "expo-local-authentication",
+      "expo-font",
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0630c801-ecc6-44c0-a56b-92da3fa0585d"
+      }
+    }
+  }
+}
