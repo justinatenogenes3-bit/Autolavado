@@ -4,7 +4,8 @@ import { db } from '../config/firebaseConfig';
 import {
   verifyCredentials, fetchUserByUsername,
   addUserDB, updateUserDB, deleteUserDB,
-  addWashDB, updateWashDB,
+  addWashDB, updateWashDB, deleteWashDB,
+  uploadEvidence as uploadEvidenceService,   // ← nuevo
 } from '../services/firebaseService';
 
 export type Role = 'admin' | 'employee';
@@ -15,43 +16,24 @@ export type EvidenceType =
   | 'cajuela' | 'danos' | 'general';
 
 export interface User {
-  id: string;
-  name: string;
-  username: string;
-  password?: string;
-  role: Role;
-  phone?: string;
-  status?: 'active' | 'inactive';
-  isOnline?: boolean;
+  id: string; name: string; username: string; password?: string;
+  role: Role; phone?: string; status?: 'active' | 'inactive'; isOnline?: boolean;
 }
-
 export interface Evidence {
-  id: string;
-  type: EvidenceType;
-  uri: string;
-  timestamp: string;
+  id: string; type: EvidenceType; uri: string; timestamp: string;
 }
-
 export interface Wash {
   id: string;
   vehicle: { plate: string; model: string; color: string };
-  type: string;
-  price?: number;
-  status: WashStatus;
+  type: string; price?: number; status: WashStatus;
   employeeId?: string | null;
-  evidenceBefore: Evidence[];
-  evidenceAfter: Evidence[];
-  finalLocation?: string;
-  observations?: string;
-  createdAt: string;
-  finishedAt?: string;
+  evidenceBefore: Evidence[]; evidenceAfter: Evidence[];
+  finalLocation?: string; observations?: string;
+  createdAt: string; finishedAt?: string;
 }
 
 interface AppState {
-  currentUser: User | null;
-  users: User[];
-  washes: Wash[];
-  loading: boolean;
+  currentUser: User | null; users: User[]; washes: Wash[]; loading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   loginByBiometric: (username: string) => Promise<boolean>;
   logout: () => void;
@@ -60,6 +42,9 @@ interface AppState {
   deleteUser: (id: string) => Promise<void>;
   addWash: (wash: Omit<Wash, 'id' | 'createdAt'>) => Promise<void>;
   updateWash: (id: string, updates: Partial<Wash>) => Promise<void>;
+  deleteWash: (id: string) => Promise<void>;
+  // ← nuevo: sube la foto y devuelve la URL pública de Firebase Storage
+  uploadEvidence: (washId: string, evidenceId: string, localUri: string) => Promise<string>;
 }
 
 const AppContext = createContext<AppState | undefined>(undefined);
@@ -70,71 +55,57 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [washes, setWashes]           = useState<Wash[]>([]);
   const [loading, setLoading]         = useState(true);
 
-  // ── Escucha en tiempo real de usuarios ──────────────────────────────────────
+  // Tiempo real — usuarios
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
-      setUsers(data);
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
     }, e => console.error('Error usuarios:', e));
     return () => unsub();
   }, []);
 
-  // ── Escucha en tiempo real de lavados ───────────────────────────────────────
+  // Tiempo real — lavados
   useEffect(() => {
     const unsub = onSnapshot(
       query(collection(db, 'washes'), orderBy('createdAt', 'desc')),
       snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Wash));
-        setWashes(data);
+        setWashes(snap.docs.map(d => ({ id: d.id, ...d.data() } as Wash)));
         setLoading(false);
       },
-      e => {
-        console.error('Error lavados:', e);
-        setLoading(false);
-      }
+      e => { console.error('Error lavados:', e); setLoading(false); }
     );
     return () => unsub();
   }, []);
 
-  // ── Auth ────────────────────────────────────────────────────────────────────
   const login = async (username: string, password: string): Promise<boolean> => {
     const user = await verifyCredentials(username, password);
     if (user) { setCurrentUser(user); return true; }
     return false;
   };
-
   const loginByBiometric = async (username: string): Promise<boolean> => {
     const user = await fetchUserByUsername(username);
     if (user) { setCurrentUser(user); return true; }
     return false;
   };
-
   const logout = () => setCurrentUser(null);
 
-  // ── Usuarios ────────────────────────────────────────────────────────────────
-  const addUser = async (userData: Omit<User, 'id'>) => {
-    await addUserDB(userData);
-    // onSnapshot actualiza automáticamente
-  };
-
-  const updateUser = async (id: string, updates: Partial<User>) => {
+  const addUser    = async (userData: Omit<User, 'id'>)          => { await addUserDB(userData); };
+  const updateUser = async (id: string, updates: Partial<User>)  => {
     await updateUserDB(id, updates);
     setCurrentUser(prev => prev?.id === id ? { ...prev, ...updates } : prev);
   };
+  const deleteUser = async (id: string) => { await deleteUserDB(id); };
 
-  const deleteUser = async (id: string) => {
-    await deleteUserDB(id);
-  };
+  const addWash    = async (washData: Omit<Wash, 'id' | 'createdAt'>) => { await addWashDB(washData); };
+  const updateWash = async (id: string, updates: Partial<Wash>)       => { await updateWashDB(id, updates); };
+  const deleteWash = async (id: string)                                => { await deleteWashDB(id); };
 
-  // ── Lavados ─────────────────────────────────────────────────────────────────
-  const addWash = async (washData: Omit<Wash, 'id' | 'createdAt'>) => {
-    await addWashDB(washData);
-    // onSnapshot actualiza automáticamente en todos los dispositivos
-  };
-
-  const updateWash = async (id: string, updates: Partial<Wash>) => {
-    await updateWashDB(id, updates);
-    // onSnapshot actualiza automáticamente en todos los dispositivos
+  // Sube foto a Firebase Storage y devuelve la URL pública
+  const uploadEvidence = async (
+    washId: string,
+    evidenceId: string,
+    localUri: string
+  ): Promise<string> => {
+    return await uploadEvidenceService(washId, evidenceId, localUri);
   };
 
   return (
@@ -142,7 +113,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       currentUser, users, washes, loading,
       login, loginByBiometric, logout,
       addUser, updateUser, deleteUser,
-      addWash, updateWash,
+      addWash, updateWash, deleteWash,
+      uploadEvidence,   // ← nuevo
     }}>
       {children}
     </AppContext.Provider>
@@ -162,18 +134,15 @@ export const STATUS_CONFIG: Record<WashStatus, { label: string; bg: string; colo
   finished:    { label: 'Finalizado', bg: '#DCFCE7', color: '#166534', dot: '#22C55E' },
   cancelled:   { label: 'Cancelado',  bg: '#FEE2E2', color: '#991B1B', dot: '#EF4444' },
 };
-
 export const EVIDENCE_TYPES: EvidenceType[] = [
   'frontal', 'trasera', 'conductor', 'copiloto',
   'tablero', 'asientos_delanteros', 'asientos_traseros', 'cajuela',
 ];
-
 export const EVIDENCE_LABELS: Record<EvidenceType, string> = {
   frontal: 'Frontal', trasera: 'Trasera', conductor: 'Conductor',
   copiloto: 'Copiloto', tablero: 'Tablero',
   asientos_delanteros: 'Asientos Del.', asientos_traseros: 'Asientos Tras.',
   cajuela: 'Cajuela', danos: 'Daños', general: 'General',
 };
-
 export const WASH_TYPES = ['Completo', 'Express', 'Interiores', 'Básico'];
 export const FINAL_LOCATIONS = ['Área de Secado', 'Zona de Entrega', 'Estacionamiento A', 'Estacionamiento B'];
